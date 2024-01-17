@@ -103,5 +103,72 @@ describe('MinaChallange1', () => {
     const updatedMessageList = zkApp.reducer.getActions();
     expect(updatedMessageList[1][0].message).toEqual(Field(0b11000000));
     expect(zkApp.messageCounter.get()).toEqual(Field(1));
+    let errorMsg = '';
+    expect(await Mina.transaction(deployerAccount, () => {
+      // Create a field with last 6 bits are following the message format rules
+      // 0b10000000
+      zkApp.createMessage(senderKey, Field(0b11000000));
+    }).catch((e) => errorMsg = e));
+    expect(errorMsg).toEqual(Error('Field.assertEquals(): 2 != 1'));
   });
+
+  it('correctly checks if message format is right', async () => {
+    await localDeploy();
+
+    const txn = await Mina.transaction(deployerAccount, () => {
+      zkApp.addAddress(adminKey, senderAccount);
+    });
+    await txn.prove();
+    await txn.sign([deployerKey, adminKey]).send();
+    
+    expect(zkApp.messageCounter.get()).toEqual(Field(0));
+    let errorMsg = '';
+    await Mina.transaction(deployerAccount, () => {
+      // Create a field with last 6 bits are not following the message format rules
+      // 0b10000000
+      zkApp.checkMessageFormat(Field(0b1111111));
+    }).catch((e) => errorMsg = e);
+    expect(errorMsg).toEqual(Error('Bool.assertEquals(): true != false'));
+
+    errorMsg = '';
+    await Mina.transaction(deployerAccount, () => {
+      // Create a field with last 6 bits are not following the message format rules
+      // 0b10000000
+      zkApp.checkMessageFormat(Field(0b11000000));
+    }).catch((e) => errorMsg = e);
+    expect(errorMsg).toEqual("");
+
+    errorMsg = '';
+    await Mina.transaction(deployerAccount, () => {
+      // Create a field with last 6 bits are not following the message format rules
+      // 0b10000000
+      zkApp.checkMessageFormat(Field(0b11111110000111));
+    }).catch((e) => errorMsg = e);  
+    expect(errorMsg).toEqual(Error('Bool.assertEquals(): true != false'));
+
+    errorMsg = '';
+    await Mina.transaction(deployerAccount, () => {
+      // Create a field with last 6 bits are not following the message format rules
+      // 0b10000000
+      zkApp.checkMessageFormat(Field(0b1111111000110));
+    }).catch((e) => errorMsg = e);
+    expect(errorMsg).toEqual(Error('Bool.assertEquals(): true != false'));
+
+    errorMsg = '';
+    await Mina.transaction(deployerAccount, () => {
+      // Create a field with last 6 bits are not following the message format rules
+      // 0b10000000
+      zkApp.checkMessageFormat(Field(0b11111110011000));
+    }).catch((e) => errorMsg = e);
+    expect(errorMsg).toEqual("");
+    errorMsg = '';
+    await Mina.transaction(deployerAccount, () => {
+      // Create a field with last 6 bits are not following the message format rules
+      // 0b10000000
+      zkApp.checkMessageFormat(Field(0b11111110010000));
+    }).catch((e) => errorMsg = e);
+    expect(errorMsg).toEqual(Error('Bool.assertEquals(): true != false'));
+  });
+
+
 });

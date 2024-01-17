@@ -1,16 +1,29 @@
-import { Field, SmartContract, state, State, method, Reducer, PublicKey, Struct, PrivateKey, Bool, Gadgets, Provable, Poseidon } from 'o1js';
+import {
+  Field,
+  SmartContract,
+  state,
+  State,
+  method,
+  Reducer,
+  PublicKey,
+  Struct,
+  PrivateKey,
+  Bool,
+  Gadgets,
+  Provable,
+  Poseidon,
+} from 'o1js';
 
+const adminPrivatekey = PrivateKey.fromBase58(
+  'EKEdDGiN9Zd9TaSPcNjs3nB6vs9JS3WCgdsrfyEeLcQpnXNR7j6E'
+);
 
+const MASK_6BITS = Field(0b111111);
 
-const adminPrivatekey = PrivateKey.fromBase58("EKEdDGiN9Zd9TaSPcNjs3nB6vs9JS3WCgdsrfyEeLcQpnXNR7j6E");
-const adminPublicKey = adminPrivatekey.toPublicKey();
-
-export class EligibleAddress extends Struct ({
+export class EligibleAddress extends Struct({
   address: PublicKey,
   message: Field,
 }) {
-
-
   constructor(address: PublicKey, message: Field) {
     super({ address, message });
     this.address = address;
@@ -19,11 +32,9 @@ export class EligibleAddress extends Struct ({
 }
 
 export class MinaChallange1 extends SmartContract {
-
   events = {
     'create-message': Field,
   };
-
 
   reducer = Reducer({ actionType: EligibleAddress });
 
@@ -32,8 +43,6 @@ export class MinaChallange1 extends SmartContract {
   @state(PublicKey) admin = State<PublicKey>();
 
   @state(Field) actionAccountState = State<Field>();
-
-
 
   @method init() {
     super.init();
@@ -55,7 +64,6 @@ export class MinaChallange1 extends SmartContract {
     this.addressCounter.set(newState);
   }
 
-
   @method addAddress(admin_priv: PrivateKey, address: PublicKey) {
     // Require admin signature
     admin_priv.toPublicKey().assertEquals(this.admin.getAndRequireEquals());
@@ -65,59 +73,59 @@ export class MinaChallange1 extends SmartContract {
   }
 
   @method createMessage(user_priv: PrivateKey, message: Field) {
-      this.checkIfAddressEligibleToMessage(user_priv.toPublicKey());
-      let user_pub = user_priv.toPublicKey();
-      let eligibleAddress = new EligibleAddress(user_pub, message);
-      this.reducer.dispatch(eligibleAddress);
-      this.emitEvent('create-message', message);
-      this.updateMessageCounter();
-    }
+    //this.checkMessageFormat(message);
+    this.checkIfAddressEligibleToMessage(user_priv.toPublicKey());
+    let user_pub = user_priv.toPublicKey();
+    let eligibleAddress = new EligibleAddress(user_pub, message);
+    this.reducer.dispatch(eligibleAddress);
+    this.emitEvent('create-message', message);
+    this.updateMessageCounter();
+  }
 
   @method checkIfAddressEligibleToMessage(address: PublicKey) {
     const actionAccountState = this.actionAccountState.getAndRequireEquals();
-    let addedAddressesList = this.reducer.getActions({ fromActionState: actionAccountState });
+    let addedAddressesList = this.reducer.getActions({
+      fromActionState: actionAccountState,
+    });
     let initial = {
       state: Field(0),
       actionState: Reducer.initialActionState,
-    };    // Check if address ever posted a message before
+    }; // Check if address ever posted a message before
     let { state, actionState } = this.reducer.reduce(
       addedAddressesList,
       Field,
-      (state: Field, action: EligibleAddress) => Provable.if(action.address.equals(address), state.add(1), state),
+      (state: Field, action: EligibleAddress) =>
+        Provable.if(action.address.equals(address), state.add(1), state),
       initial,
       { skipActionStatePrecondition: true }
     );
     //Need only one record of address that is when we add the address to the list
-    state.assertEquals(1, 'Address is not eligible to post message');
+    state.assertEquals(1);
   }
 
   @method checkMessageFormat(message: Field) {
-    let flags = message.toBits();
-    let flag1 = flags[-6];
-    let flag2 = flags[-5];
-    let flag3 = flags[-4];
-    let flag4 = flags[-3];
-    let flag5 = flags[-2];
-    let flag6 = flags[-1];
+    let flags = Gadgets.and(message, MASK_6BITS, 254).toBits(6);
+    let flag1 = flags[5];
+    let flag2 = flags[4];
+    let flag3 = flags[3];
+    let flag4 = flags[2];
+    let flag5 = flags[1];
+    let flag6 = flags[0];
 
-    if (flag1) {
-      if (flag2 || flag3 || flag4 || flag5 || flag6) {
-        throw new Error('Invalid message format: Rule 1');
-      }
-    }
+    Provable.if(
+      flag1,
+      flag2.or(flag3).or(flag4).or(flag5).or(flag6).equals(Bool(true)),
+      Bool(false)
+    ).assertEquals(Bool(false));
 
-    if (flag2) {
-      if (!flag3) {
-        throw new Error('Invalid message format: Rule 2');
-      }
-    }
+    Provable.if(flag2, flag3.equals(Bool(false)), Bool(false)).assertEquals(
+      Bool(false)
+    );
 
-    if (flag4) {
-      if (flag5 || flag6) {
-        throw new Error('Invalid message format: Rule 3');
-      }
-    }
-
-    return true;
+    Provable.if(
+      flag4,
+      flag5.or(flag6).equals(Bool(true)),
+      Bool(false)
+    ).assertEquals(Bool(false));
   }
 }
