@@ -67,6 +67,7 @@ export class MinaChallange1 extends SmartContract {
   @method addAddress(admin_priv: PrivateKey, address: PublicKey) {
     // Require admin signature
     admin_priv.toPublicKey().assertEquals(this.admin.getAndRequireEquals());
+    this.checkAddressUnique(address);
     // Dispatch field 0 to define address as eligible without creating message
     this.reducer.dispatch(new EligibleAddress(address, Field(0)));
     this.updateAddressCounter();
@@ -80,6 +81,27 @@ export class MinaChallange1 extends SmartContract {
     this.reducer.dispatch(eligibleAddress);
     this.emitEvent('create-message', message);
     this.updateMessageCounter();
+  }
+
+  @method checkAddressUnique(address: PublicKey) {
+    const actionAccountState = this.actionAccountState.getAndRequireEquals();
+    let addedAddressesList = this.reducer.getActions({
+      fromActionState: actionAccountState,
+    });
+    let initial = {
+      state: Field(0),
+      actionState: Reducer.initialActionState,
+    }; // Check if address ever posted a message before
+    let { state, actionState } = this.reducer.reduce(
+      addedAddressesList,
+      Field,
+      (state: Field, action: EligibleAddress) =>
+        Provable.if(action.address.equals(address), state.add(1), state),
+      initial,
+      { skipActionStatePrecondition: true }
+    );
+    //Need only one record of address that is when we add the address to the list
+    state.assertEquals(0);
   }
 
   @method checkIfAddressEligibleToMessage(address: PublicKey) {
