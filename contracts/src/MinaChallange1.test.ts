@@ -80,6 +80,12 @@ describe('MinaChallange1', () => {
     await txn2.sign([deployerKey, adminKey]).send();
     expect(zkApp.addressCounter.get()).toEqual(Field(2));
 
+    // Use the same address to add and fail
+    let errorMsg = '';
+    const tx3 = await Mina.transaction(deployerAccount, () => {
+      zkApp.addAddress(adminKey, senderAccount);
+    }).catch((e) => errorMsg = e);
+    expect(errorMsg).toEqual(Error('Field.assertEquals(): 1 != 0'));
   });
 
   it('correctly adds the new message as action on the `MinaChallange1` smart contract', async () => {
